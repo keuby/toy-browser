@@ -23,7 +23,7 @@ body div img{
 </head>
 <body>
     <div>
-        <img id="myid"/>
+        <img id="myid" src="http://www.baidu.com" />
         <img />
     </div>
 </body>

@@ -1,12 +1,36 @@
-const EOF = Symbol('EOF')
+const { isLetter, isSpace, isIgnore, EOF } = require('./util')
 
 class HtmlParser {
   constructor () {
-    this.currentTag = null
+    this.tagToken = null
+    this.commentToken = null
+    this.returnState = null
   }
 
   emit (token) {
     console.log(token)
+  }
+
+  createAttribute (token, c) {
+    const attribute = { name: c || '', value: '' }
+    if (token.attributes) {
+      token.attributes.push(attribute)
+    } else {
+      token.attributes = [attribute]
+    }
+    return attribute
+  }
+
+  appendAttributeName (token, c) {
+    const lastIdx = token.attributes.length - 1
+    const attribute = token.attributes[lastIdx]
+    attribute.name += c
+  }
+
+  appendAttributeValue (token, c) {
+    const lastIdx = token.attributes.length - 1
+    const attribute = token.attributes[lastIdx]
+    attribute.value += c
   }
 
   parseHTML (html) {
@@ -18,10 +42,10 @@ class HtmlParser {
   }
 
   data (c) {
-    if (c === '<') {
-      return this.tagOpen
-    } else if (c === EOF) {
+    if (c === EOF) {
       this.emit({ type: 'end-of-file' })
+    } else if (c === '<') {
+      return this.tagOpen
     } else {
       this.emit({ type: 'character', char: c })
       return this.data
@@ -29,33 +53,53 @@ class HtmlParser {
   }
 
   tagOpen (c) {
-    if (c === '/') {
-      return this.endTagopen
-    } else if (isLetter(c)) {
-      this.currentTag = { type: 'start-tag', tagName: '' }
-      return this.tagName(c)
-    } else if (c === EOF) {
+    if (c === EOF) {
       this.emit({ type: 'character', char: '<' })
       this.emit({ type: 'end-of-file' })
+    } else if (c === '/') {
+      return this.endTagOpen
+    } else if (isLetter(c)) {
+      this.tagToken = { type: 'start-tag', tagName: '' }
+      return this.tagName(c)
     } else {
       this.emit({ type: 'character', char: '<' })
       return this.data(c)
     }
   }
 
+  endTagOpen (c) {
+    if (c === EOF) {
+      this.emit({ type: 'character', char: '<' })
+      this.emit({ type: 'character', char: '/' })
+      this.emit({ type: 'end-of-file' })
+      return this.endTagOpen
+    } else if (isLetter(c)) {
+      this.tagToken = { type: 'end-tag', tagName: '' }
+      return this.tagName(c)
+    } else if (c === '>') {
+      return this.data
+    } else {
+      this.commentToken = { type: 'comment', data: '' }
+      return this.bogusComment(c)
+    }
+  }
+
   tagName (c) {
-    if (isSpace(c)) {
+    if (c === EOF) {
+      this.emit({ type: 'end-of-file' })
+      return this.tagName
+    } else if (isSpace(c)) {
       return this.beforeAttributeName
     } else if (c === '/') {
       return this.selfClosingStartTag
     } else if (c === '>') {
-      this.emit(this.token)
+      this.emit(this.tagToken)
       return this.data
-    } else if (c === EOF) {
-      this.emit({ type: 'end-of-file', content: c })
+    } else if (isLetter(c)) {
+      this.tagToken.tagName += c.toLowerCase()
       return this.tagName
     } else {
-      this.token.content += c
+      this.tagToken.tagName += c
       return this.tagName
     }
   }
@@ -63,33 +107,165 @@ class HtmlParser {
   beforeAttributeName (c) {
     if (isSpace(c)) {
       return this.beforeAttributeName
-    } else if (/^[\/>]$/.test(c) || c === EOF) {
-      return this.afterAttributeAame(c)
+    } else if (isIgnore(c)) {
+      return this.afterAttributeName(c)
+    } else if (c === '=') {
+      this.createAttribute(this.tagToken, c)
+      return this.attributeName
     } else {
-      this.token.attribute = { name: c, value: '' }
-      return c === '='
-        ? this.attributeAame
-        : this.attributeAame(c)
+      this.createAttribute(this.tagToken)
+      return this.attributeName(c)
     }
   }
 
-  SelfClosingStartTag (c) {
+  afterAttributeName (c) {
+    if (c === EOF) {
+      this.emit({ type: 'end-of-file' })
+      return this.afterAttributeName
+    } else if (isSpace(c)) {
+      return this.afterAttributeName
+    } else if (c === '/') {
+      return this.selfClosingStartTag
+    } else if (c === '=') {
+      return this.beforeAttributeValue
+    } else if (c === '>') {
+      this.emit(this.tagToken)
+      return this.data
+    } else {
+      this.createAttribute(this.tagToken)
+      return this.attributeName
+    }
+  }
+
+  beforeAttributeValue (c) {
+    if (c === EOF || isSpace(c)) {
+      return this.beforeAttributeValue
+    } else if (c === '"') {
+      return this.attributeValueDoubleQuoted
+    } else if (c === '\'') {
+      return this.attributeValueSingleQuoted
+    } else if (c === '>') {
+      this.emit(this.tagToken)
+      return this.data
+    } else {
+      return this.attributeValueUnquoted(c)
+    }
+  }
+
+  attributeValueDoubleQuoted (c) {
+    if (c === EOF) {
+      this.emit({ type: 'end-of-file' })
+      return this.attributeValueDoubleQuoted
+    } if (c === '"') {
+      return this.afterAttributeValueQuoted
+    } else if (c === '&') {
+      this.returnState = this.attributeValueDoubleQuoted
+      return this.characterReference
+    } else {
+      this.appendAttributeValue(this.tagToken, c)
+      return this.attributeValueDoubleQuoted
+    }
+  }
+
+  attributeValueSingleQuoted (c) {
+    if (c === EOF) {
+      this.emit({ type: 'end-of-file' })
+      return this.attributeValueSingleQuoted
+    } if (c === '\'') {
+      return this.afterAttributeValueQuoted
+    } else if (c === '&') {
+      this.returnState = this.attributeValueSingleQuoted
+      return this.characterReference
+    } else {
+      this.appendAttributeValue(this.tagToken, c)
+      return this.attributeValueSingleQuoted
+    }
+  }
+
+  attributeValueUnquoted (c) {
+    if (c === EOF) {
+      this.emit({ type: 'end-of-file' })
+      return this.attributeValueUnquoted
+    } else if (isSpace(c)) {
+      return this.beforeAttributeName
+    } else if (c === '&') {
+      this.returnState = this.attributeValueUnquoted
+      return this.characterReference
+    } else if (c === '>') {
+      return this.data
+    } else if ('"\'<=`'.includes(c)) {
+      this.appendAttributeValue(this.tagToken, c)
+      return this.attributeValueUnquoted
+    } else {
+      this.appendAttributeValue(this.tagToken, c)
+      return this.attributeValueUnquoted
+    }
+  }
+
+  afterAttributeValueQuoted (c) {
+    if (c === EOF) {
+      this.emit({ type: 'end-of-file' })
+      return this.afterAttributeValueQuoted
+    } else if (isSpace(c)) {
+      return this.beforeAttributeName
+    } else if (c === '/') {
+      return this.selfClosingStartTag
+    } else if (c === '>') {
+      this.emit(this.tagToken)
+      return this.data
+    } else {
+      return this.beforeAttributeName(c)
+    }
+  }
+
+  attributeName (c) {
+    if (isSpace(c) || isIgnore(c)) {
+      return this.afterAttributeName(c)
+    } else if (c === '=') {
+      return this.beforeAttributeValue
+    } else if (isLetter(c)) {
+      this.appendAttributeName(this.tagToken, c.toLowerCase())
+      return this.attributeName
+    } else if ('"\'<'.includes(c)) {
+      this.appendAttributeName(this.tagToken, c)
+      return this.attributeName
+    } else {
+      this.appendAttributeName(this.tagToken, c)
+      return this.attributeName
+    }
+  }
+
+  selfClosingStartTag (c) {
     if (c === '>') {
-      this.token.isSelfClosing = true
-      this.emit(this.token)
+      this.tagToken.isSelfClosing = true
+      this.emit(this.tagToken)
+      return this.data
+    } else if (c === EOF) {
+      this.emit({ type: 'end-of-file' })
+      return this.selfClosingStartTag
+    } else {
+      return this.beforeAttributeName
+    }
+  }
+
+  bogusComment (c) {
+    if (c === EOF) {
+      this.emit({ type: 'end-of-file' })
+      return this.bogusComment
+    } else if (c === '\u0000') {
+      this.commentToken.data += '\ufffd'
+      return this.bogusComment
+    } else if (c === '>') {
+      this.emit(this.commentToken)
+      return this.data
+    } else {
+      this.commentToken.data += c
+      return this.bogusComment
     }
   }
 }
 
-module.exports.parseHTML = body => {
+module.exports.parseHTML = function (body) {
   const parser = new HtmlParser()
   return parser.parseHTML(body)
-}
-
-function isLetter (c) {
-  return /^[a-zA-Z]$/.test(c)
-}
-
-function isSpace (c) {
-  return /^[\t\n\f\s]$/.test(c)
 }
