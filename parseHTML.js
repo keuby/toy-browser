@@ -1,14 +1,58 @@
 const { isLetter, isSpace, isIgnore, EOF } = require('./util')
+const css = require('css')
 
 class HtmlParser {
   constructor () {
     this.tagToken = null
     this.commentToken = null
     this.returnState = null
+
+    this.currentTextNode = null
+    this.stack = [{ type: 'document', children: [] }]
+    this.rules = []
+  }
+
+  addCSSRules (content) {
+    const ast = css.parse(content)
+    this.rules.push(...ast.stylesheet.rules)
   }
 
   emit (token) {
-    console.log(token)
+    const top = this.stack[this.stack.length - 1]
+
+    if (token.type === 'startTag') {
+      const element = {
+        type: 'element',
+        tagName: token.tagName,
+        children: [],
+        attribute: token.attributes || [],
+        parentNode: top
+      }
+
+      top.children.push(element)
+      !token.isSelfClosing && this.stack.push(element)
+      this.currentTextNode = null
+    } else if (token.type === 'endTag') {
+      if (token.tagName !== top.tagName) {
+        throw new Error('element is not matched')
+      } else {
+        if (token.tagName === 'style') {
+          this.addCSSRules(top.children[0].content)
+        }
+        this.stack.pop()
+      }
+      this.currentTextNode = null
+    } else if (token.type === 'character') {
+      if (this.currentTextNode) {
+        this.currentTextNode.content += token.char
+      } else {
+        this.currentTextNode = {
+          type: 'text',
+          content: token.char
+        }
+        top.children.push(this.currentTextNode)
+      }
+    }
   }
 
   createAttribute (token, c) {
@@ -38,12 +82,15 @@ class HtmlParser {
     for (const c of html) {
       state = state.call(this, c)
     }
-    return state.call(this, EOF)
+    state.call(this, EOF)
+    const dom = this.stack[0]
+    const rules = this.rules
+    return { dom, rules }
   }
 
   data (c) {
     if (c === EOF) {
-      this.emit({ type: 'end-of-file' })
+      this.emit({ type: 'EOF' })
     } else if (c === '<') {
       return this.tagOpen
     } else {
@@ -55,11 +102,11 @@ class HtmlParser {
   tagOpen (c) {
     if (c === EOF) {
       this.emit({ type: 'character', char: '<' })
-      this.emit({ type: 'end-of-file' })
+      this.emit({ type: 'EOF' })
     } else if (c === '/') {
       return this.endTagOpen
     } else if (isLetter(c)) {
-      this.tagToken = { type: 'start-tag', tagName: '' }
+      this.tagToken = { type: 'startTag', tagName: '' }
       return this.tagName(c)
     } else {
       this.emit({ type: 'character', char: '<' })
@@ -71,10 +118,10 @@ class HtmlParser {
     if (c === EOF) {
       this.emit({ type: 'character', char: '<' })
       this.emit({ type: 'character', char: '/' })
-      this.emit({ type: 'end-of-file' })
+      this.emit({ type: 'EOF' })
       return this.endTagOpen
     } else if (isLetter(c)) {
-      this.tagToken = { type: 'end-tag', tagName: '' }
+      this.tagToken = { type: 'endTag', tagName: '' }
       return this.tagName(c)
     } else if (c === '>') {
       return this.data
@@ -86,7 +133,7 @@ class HtmlParser {
 
   tagName (c) {
     if (c === EOF) {
-      this.emit({ type: 'end-of-file' })
+      this.emit({ type: 'EOF' })
       return this.tagName
     } else if (isSpace(c)) {
       return this.beforeAttributeName
@@ -120,7 +167,7 @@ class HtmlParser {
 
   afterAttributeName (c) {
     if (c === EOF) {
-      this.emit({ type: 'end-of-file' })
+      this.emit({ type: 'EOF' })
       return this.afterAttributeName
     } else if (isSpace(c)) {
       return this.afterAttributeName
@@ -154,7 +201,7 @@ class HtmlParser {
 
   attributeValueDoubleQuoted (c) {
     if (c === EOF) {
-      this.emit({ type: 'end-of-file' })
+      this.emit({ type: 'EOF' })
       return this.attributeValueDoubleQuoted
     } if (c === '"') {
       return this.afterAttributeValueQuoted
@@ -169,7 +216,7 @@ class HtmlParser {
 
   attributeValueSingleQuoted (c) {
     if (c === EOF) {
-      this.emit({ type: 'end-of-file' })
+      this.emit({ type: 'EOF' })
       return this.attributeValueSingleQuoted
     } if (c === '\'') {
       return this.afterAttributeValueQuoted
@@ -184,7 +231,7 @@ class HtmlParser {
 
   attributeValueUnquoted (c) {
     if (c === EOF) {
-      this.emit({ type: 'end-of-file' })
+      this.emit({ type: 'EOF' })
       return this.attributeValueUnquoted
     } else if (isSpace(c)) {
       return this.beforeAttributeName
@@ -204,7 +251,7 @@ class HtmlParser {
 
   afterAttributeValueQuoted (c) {
     if (c === EOF) {
-      this.emit({ type: 'end-of-file' })
+      this.emit({ type: 'EOF' })
       return this.afterAttributeValueQuoted
     } else if (isSpace(c)) {
       return this.beforeAttributeName
@@ -241,7 +288,7 @@ class HtmlParser {
       this.emit(this.tagToken)
       return this.data
     } else if (c === EOF) {
-      this.emit({ type: 'end-of-file' })
+      this.emit({ type: 'EOF' })
       return this.selfClosingStartTag
     } else {
       return this.beforeAttributeName
@@ -250,7 +297,7 @@ class HtmlParser {
 
   bogusComment (c) {
     if (c === EOF) {
-      this.emit({ type: 'end-of-file' })
+      this.emit({ type: 'EOF' })
       return this.bogusComment
     } else if (c === '\u0000') {
       this.commentToken.data += '\ufffd'

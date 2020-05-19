@@ -213,5 +213,7 @@ const request = new HttpRequest({
 
 const parser = require('./parseHTML')
 request.send().then(response => {
-  parser.parseHTML(response.body)
+  const result = parser.parseHTML(response.body)
+  console.log(result.dom)
+  console.log(result.rules)
 })

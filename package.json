@@ -1,0 +1,23 @@
+{
+  "name": "toy-browser",
+  "version": "1.0.0",
+  "description": "",
+  "main": "client.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keuby/toy-browser.git"
+  },
+  "author": "Keuby",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/keuby/toy-browser/issues"
+  },
+  "homepage": "https://github.com/keuby/toy-browser#readme",
+  "dependencies": {
+    "css": "^2.2.4"
+  }
+}
