@@ -1,4 +1,4 @@
-const { isLetter, isSpace, isIgnore, EOF } = require('../util')
+const { isLetter, isSpace, EOF } = require('../util')
 
 class HTMLStateMachine {
   constructor (emit = () => {}) {
@@ -96,7 +96,7 @@ class HTMLStateMachine {
   beforeAttributeName (c) {
     if (isSpace(c)) {
       return this.beforeAttributeName
-    } else if (isIgnore(c)) {
+    } else if (c === EOF || '/>'.includes(c)) {
       return this.afterAttributeName(c)
     } else if (c === '=') {
       this.createAttribute(this.tagToken, c)
@@ -208,7 +208,7 @@ class HTMLStateMachine {
   }
 
   attributeName (c) {
-    if (isSpace(c) || isIgnore(c)) {
+    if (isSpace(c) || c === EOF || '/>'.includes(c)) {
       return this.afterAttributeName(c)
     } else if (c === '=') {
       return this.beforeAttributeValue

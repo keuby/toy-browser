@@ -1,6 +1,6 @@
-const css = require('css')
-const { HTMLStateMachine } = require('./html-state-machine')
+const { EOF } = require('../util')
 const { CSSHandler } = require('./css')
+const { HTMLStateMachine } = require('./html-state-machine')
 
 class HtmlParser {
   constructor () {
@@ -9,20 +9,20 @@ class HtmlParser {
   }
 
   parseHTML (html) {
-    const cssHandler = new CSSHandler()
+    this.currentTextNode = null
+    this.stack = [{ type: 'document', children: [] }]
+
+    const cssHandler = new CSSHandler(this.stack)
     const stateMachine = new HTMLStateMachine(token => {
       this.emit(token, cssHandler)
     })
-    this.currentTextNode = null
-    this.stack = [{ type: 'document', children: [] }]
-    let state = this.data
+
+    let state = stateMachine.data
     for (const c of html) {
-      state = state.call(this, c)
+      state = state.call(stateMachine, c)
     }
-    state.call(this, EOF)
-    const dom = this.stack[0]
-    const rules = this.rules
-    return { dom, rules }
+    state.call(stateMachine, EOF)
+    return this.stack[0]
   }
 
   emit (token, cssHandler) {
@@ -33,8 +33,8 @@ class HtmlParser {
         type: 'element',
         tagName: token.tagName,
         children: [],
-        attribute: token.attributes || [],
-        parentNode: top
+        attributes: token.attributes || [],
+        parent: top
       }
 
       cssHandler.computeCSS(element)

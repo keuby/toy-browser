@@ -58,7 +58,6 @@ ${Object.keys(this.headers).map(key => `${key}: ${this.headers[key]}`).join('\n'
 ${this.bodyText}`
   }
 }
-
 class ResponseParser {
   constructor () {
     this.WAITING_STATUS_LINE = 0
@@ -211,9 +210,9 @@ const request = new HttpRequest({
   }
 })
 
-const parser = require('./parseHTML')
+const parser = require('./parser/html')
+
 request.send().then(response => {
   const result = parser.parseHTML(response.body)
-  console.log(result.dom)
-  console.log(result.rules)
+  console.log(result)
 })
