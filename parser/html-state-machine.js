@@ -1,4 +1,4 @@
-const { isLetter, isSpace, EOF } = require('../util')
+const EOF = Symbol('EOF')
 
 class HTMLStateMachine {
   constructor (emit = () => {}) {
@@ -254,4 +254,13 @@ class HTMLStateMachine {
   }
 }
 
+function isLetter (c) {
+  return /^[a-zA-Z]$/.test(c)
+}
+
+function isSpace (c) {
+  return '\t\n\f '.includes(c)
+}
+
+module.exports.EOF = EOF
 module.exports.HTMLStateMachine = HTMLStateMachine

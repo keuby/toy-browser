@@ -13,8 +13,7 @@ class CSSHandler {
 
   computeCSS(element) {
     const elements = this.stack.slice().reverse()
-    const computedStyle = element.computedStyle
-      || (element.computedStyle = {})
+    const computedStyle = element.computedStyle || (element.computedStyle = {})
 
     let match = false
 
@@ -37,12 +36,17 @@ class CSSHandler {
       }
 
       if (match) {
+        const sp = this.specificiy(rule.selectors[0])
         for (let declaration of rule.declarations) {
           const property = declaration.property
           if (!computedStyle[property]) {
             computedStyle[property] = {}
           }
-          computedStyle[property].value = declaration.value
+          if (!computedStyle[property].specificiy
+            || this.compareSpecificiy(computedStyle[property].specificiy, sp) < 0) {
+            computedStyle[property].specificiy = sp
+            computedStyle[property].value = declaration.value
+          }
         }
       }
     }
@@ -65,6 +69,25 @@ class CSSHandler {
     } else {
       return element.tagName === selector
     }
+  }
+
+  specificiy (selector) {
+    const p = [0, 0, 0, 0]
+    const parts = selector.split(' ')
+    for (const part of parts) {
+      if (part.startsWith('#')) {
+        p[0]++
+      } else if (part.startsWith('.')) {
+        p[1]++
+      } else {
+        p[2]++
+      }
+    }
+    return p
+  }
+
+  compareSpecificiy (sp1, sp2) {
+
   }
 }
 

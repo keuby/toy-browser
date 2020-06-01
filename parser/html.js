@@ -1,6 +1,5 @@
-const { EOF } = require('../util')
 const { CSSHandler } = require('./css')
-const { HTMLStateMachine } = require('./html-state-machine')
+const { HTMLStateMachine, EOF } = require('./html-state-machine')
 
 class HtmlParser {
   constructor () {
