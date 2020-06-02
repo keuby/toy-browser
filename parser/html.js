@@ -1,4 +1,5 @@
 const { CSSHandler } = require('./css')
+const { layout } = require('./layout')
 const { HTMLStateMachine, EOF } = require('./html-state-machine')
 
 class HtmlParser {
@@ -52,6 +53,7 @@ class HtmlParser {
         }
         this.stack.pop()
       }
+      layout(top)
       this.currentTextNode = null
     } else if (token.type === 'character') {
       if (this.currentTextNode) {

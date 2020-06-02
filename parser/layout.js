@@ -1,9 +1,11 @@
 module.exports.layout = function layout (element) {
   if (element == null ||
-    !element.computedStyle ||
-    element.computedStyle.display !== 'flex') return
+    !element.computedStyle) return
 
   const elementStyle = getStyle(element)
+
+  if (elementStyle.display !== 'flex') return
+
   const children = element.children.filter(child => {
     return child.type === 'element'
   }).sort((prev, next) => {
@@ -14,20 +16,14 @@ module.exports.layout = function layout (element) {
     ['width', null],
     ['height', null],
     ['flexDirection', 'row'],
-    ['aliginItems', 'stretch'],
+    ['alignItems', 'stretch'],
     ['justifyContent', 'flex-start'],
     ['flexWrap', 'nowrap'],
-    ['aliginContent', 'stretch'],
+    ['alignContent', 'stretch'],
   ].forEach(item => {
     setDefault(elementStyle, item[0], item[1])
   })
 
-  if (!flexDirections.has(elementStyle.flexDirection)) return
-
-  // let {
-  //   mainSize, mainStart, mainEnd, mainSign, mainBase,
-  //   crossSize, crossStart, crossEnd, crossSign, crossBase
-  // }
   const layoutAxis = computeLayoutAxis(elementStyle)
   layoutAxis.isAutoMianSize = computeAutoMainSize(elementStyle, children, layoutAxis.mainSize)
 
@@ -40,7 +36,7 @@ function getStyle (element) {
   const style = element.style || (element.style = {})
   const computedStyle = element.computedStyle
   for (const prop in computedStyle) {
-    let value = computedStyle[prop]
+    let value = computedStyle[prop] && computedStyle[prop].value
     if (value == null) continue
     
     if (`${value}`.match(/px$/)
@@ -114,8 +110,9 @@ function computeFlexLines (style, children, layoutAxis) {
 }
 
 function computeMainAxis (style, children, layoutAxis, flexLines) {
+  const { mainSize, mainBase, mainSign, mainStart, mainEnd } = layoutAxis
+
   if (flexLines[0].mainSpace < 0) {
-    const { mainSize, mainBase, mainStart, mainEnd } = layoutAxis
     const scale = style[mainSize] / (style[mainSize] - mainSpace)
 
     let currentMain = mainBase
@@ -155,28 +152,33 @@ function computeMainAxis (style, children, layoutAxis, flexLines) {
       } else {
         let currentMain = null, step = null
         switch (style.justifyContent) {
-          case 'flex-start':
+          case 'flex-start': {
             step = 0
             currentMain = mainBase
             break
-          case 'flex-end':
+          }
+          case 'flex-end': {
             step = 0
             currentMain = mainSpace * mainSign + mainBase
             break
-          case 'center':
+          }
+          case 'center': {
             step = 0
             currentMain = mainSpace / 2 * mainSign + mainBase
             break
-          case 'space-between':
+          }
+          case 'space-between': {
             const partCount = (flexLine.length - 1) || 1
             step = mainSpace / partCount * mainSign
             currentMain = mainBase
             break
-          case 'space-around':
+          }
+          case 'space-around': {
             const partCount = flexLine.length || 1
             step = mainSpace / partCount * mainSign
             currentMain = step / 2 + mainBase
             break
+          }
         }
         if (currentMain === null) continue
         for (const item of flexLine) {
@@ -191,9 +193,9 @@ function computeMainAxis (style, children, layoutAxis, flexLines) {
 }
 
 function computeCrossAxis (style, children, layoutAxis, flexLines) {
-  const { crossSize } = layoutAxis
-  let crossSpace = null
+  let { crossSize, crossBase, crossSign, crossStart, crossEnd } = layoutAxis
 
+  let crossSpace = null
   if (style[crossSize] == null) {
     crossSpace = 0
     style[crossSize] = flexLines.reduce((size, flexLine) => {
@@ -204,6 +206,68 @@ function computeCrossAxis (style, children, layoutAxis, flexLines) {
     for (const flexLine of flexLines) {
       crossSpace -= flexLine.crossSpace
     }
+  }
+
+  // const lineSize = style[crossSize] / flexLines.length
+  let step = null
+  switch (style.alignContent) {
+    case 'flex-start':
+      step = 0
+      crossBase += 0
+      break
+    case 'flex-end':
+      step = 0
+      crossBase += crossSign * crossSpace
+      break
+    case 'center':
+      step = 0
+      crossBase += crossSign * crossSpace / 2
+      break
+    case 'space-between':
+      const splitCount = (flexLines.length - 1) || 1
+      step = crossSpace / splitCount
+      crossBase += 0
+      break
+    case 'space-around':
+      step = crossSpace / flexLines.length
+      crossBase += crossSign * step / 2
+      break
+    case 'stretch':
+      step = 0
+      crossBase += 0
+      break
+  }
+
+  for (const flexLine of flexLines) {
+    const lineCrossSize = style.alignContent === 'stretch'
+      ? flexLine.crossSpace + crossSpace / flexLines.length
+      : flexLine.crossSpace
+    for (const item of flexLine) {
+      const itemStyle = getStyle(item)
+      const align = itemStyle.alignSelf || style.alignItems
+
+      if (itemStyle[crossSize] == null) {
+        itemStyle[crossSize] = align === 'stretch'
+          ? lineCrossSize
+          : 0
+      }
+
+      if (align === 'flex-start') {
+        itemStyle[crossStart] = crossBase
+        itemStyle[crossEnd] = itemStyle[crossStart] + crossSize * itemStyle[crossSize]
+      } else if (align === 'flex-end') {
+        itemStyle[crossEnd] = crossBase + crossSign * lineCrossSize
+        itemStyle[crossStart] = itemStyle[crossEnd] - crossSign * itemStyle[crossSize]
+      } else if (align === 'center') {
+        itemStyle[crossStart] = crossBase + crossSign * (lineCrossSize - itemStyle[crossSize]) / 2
+        itemStyle[crossEnd] = itemStyle[crossStart] + crossSign * itemStyle[crossSize]
+      } else if (align === 'stretch') {
+        itemStyle[crossStart] = crossBase
+        itemStyle[crossEnd] = crossBase + crossSign * (itemStyle[crossSize] == null ? itemStyle[crossSize] : lineCrossSize)
+        itemStyle[crossSize] = crossSign * (itemStyle[crossEnd] - itemStyle[crossStart])
+      }
+    }
+    crossBase += crossSign * (lineCrossSize + step)
   }
 }
 

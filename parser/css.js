@@ -38,7 +38,7 @@ class CSSHandler {
       if (match) {
         const sp = this.specificiy(rule.selectors[0])
         for (let declaration of rule.declarations) {
-          const property = declaration.property
+          const property = this.toSmallCamelCase(declaration.property)
           if (!computedStyle[property]) {
             computedStyle[property] = {}
           }
@@ -87,7 +87,14 @@ class CSSHandler {
   }
 
   compareSpecificiy (sp1, sp2) {
+    if (sp1[0] - sp2[0]) return sp1[0] - sp2[0]
+    if (sp1[1] - sp2[1]) return sp1[1] - sp2[1]
+    if (sp1[2] - sp2[2]) return sp1[2] - sp2[2]
+    return sp1[3] - sp2[3]
+  }
 
+  toSmallCamelCase (target) {
+    return target.replace(/-\w/g, matched => matched[1].toUpperCase())
   }
 }
 

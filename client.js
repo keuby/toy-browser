@@ -211,8 +211,12 @@ const request = new HttpRequest({
 })
 
 const parser = require('./parser/html')
+const images = require('images')
+const { render } = require('./render')
 
 request.send().then(response => {
-  const result = parser.parseHTML(response.body)
-  console.log(result)
+  const dom = parser.parseHTML(response.body)
+  const viewport = images(800, 600)
+  render(viewport, dom)
+  viewport.save('viewport.jpg')
 })

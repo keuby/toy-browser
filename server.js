@@ -11,14 +11,21 @@ const server = http.createServer((req, res) => {
   res.end(`<html maaa=a >
 <head>
     <style>
-body div #myid{
-    width:100px;
-    background-color: #ff5000;
-}
-body div img{
-    width:30px;
-    background-color: #ff1111;
-}
+        body div {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        body div #myid{
+            width:100px;
+            height:100px;
+            background-color: rgb(255, 0, 0);
+        }
+        body div img{
+            width:30px;
+            height:30px;
+            background-color: rgb(0, 255, 0);
+        }
     </style>
 </head>
 <body>
